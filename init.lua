@@ -281,6 +281,7 @@ return {
 	entry = function(_, args)
 		local action = args[1]
 
+		ya.err(action)
 		-- Step 1: Patch the UI with our candidates
 
 		-- enter normal, keep or select mode
@@ -389,7 +390,7 @@ return {
 			local cand = ya.which { cands = cands, silent = true }
 
 			if cand == nil then --never auto exit when pressing a nonexistent prompt key
-				return next(false, { "_read", current_num, parent_num })
+				return next(false, { "_read", current_num, parent_num, preview_num })
 			else
 				return next(true, { "_apply", cand, current_num, parent_num, preview_num })
 			end
