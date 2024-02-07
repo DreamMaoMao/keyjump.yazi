@@ -119,40 +119,42 @@ local PARENT_DOUBLE_CANDS = {
 
 }
 
-local function serialize(obj)
-    local lua = ""  
-    local t = type(obj)  
-    if t == "number" then  
-        lua = lua .. obj  
-    elseif t == "boolean" then  
-        lua = lua .. tostring(obj)  
-    elseif t == "string" then  
-        lua = lua .. string.format("%q", obj)  
-    elseif t == "table" then  
-        lua = lua .. "{"  
-        for k, v in pairs(obj) do  
-            lua = lua .. "[" .. serialize(k) .. "]=" .. serialize(v) .. ","  
-        end  
-        local metatable = getmetatable(obj)  
-        if metatable ~= nil and type(metatable.__index) == "table" then  
-            for k, v in pairs(metatable.__index) do  
-                lua = lua .. "[" .. serialize(k) .. "]=" .. serialize(v) .. ","  
-            end  
-        end  
-        lua = lua .. "}"  
-    elseif t == "nil" then  
-        return nil  
-    else  
-        error("can not serialize a " .. t .. " type.")  
-    end  
-    return lua  
-end
+-- debug function 
+-- local function serialize(obj)
+--     local lua = ""  
+--     local t = type(obj)  
+--     if t == "number" then  
+--         lua = lua .. obj  
+--     elseif t == "boolean" then  
+--         lua = lua .. tostring(obj)  
+--     elseif t == "string" then  
+--         lua = lua .. string.format("%q", obj)  
+--     elseif t == "table" then  
+--         lua = lua .. "{"  
+--         for k, v in pairs(obj) do  
+--             lua = lua .. "[" .. serialize(k) .. "]=" .. serialize(v) .. ","  
+--         end  
+--         local metatable = getmetatable(obj)  
+--         if metatable ~= nil and type(metatable.__index) == "table" then  
+--             for k, v in pairs(metatable.__index) do  
+--                 lua = lua .. "[" .. serialize(k) .. "]=" .. serialize(v) .. ","  
+--             end  
+--         end  
+--         lua = lua .. "}"  
+--     elseif t == "nil" then  
+--         return nil  
+--     else  
+--         error("can not serialize a " .. t .. " type.")  
+--     end  
+--     return lua  
+-- end
 
-local function table2string(tablevalue)
-    local stringtable = serialize(tablevalue)
-    print(stringtable)
-    return stringtable
-end
+-- debug funcion 
+-- local function table2string(tablevalue)
+--     local stringtable = serialize(tablevalue)
+--     print(stringtable)
+--     return stringtable
+-- end
 
 -- FIXME: refactor this to avoid the loop
 local function rel_position(file,view)
@@ -161,7 +163,12 @@ local function rel_position(file,view)
 	if view == "current" then
 		data = Folder:by_kind(Folder.CURRENT).window
 	elseif view == "parent" then
+		if Folder:by_kind(Folder.PARENT) == nil then
+			return nil
+		end
 		data = Folder:by_kind(Folder.PARENT).window
+	elseif view == "preview" then
+		data = Folder:by_kind(Folder.PREVIEW).window
 	end
 
 	for i, f in ipairs(data) do
@@ -210,6 +217,7 @@ local function count_files(url, max)
 end
 
 local function toggle_ui(st)
+	ya.manager_emit("peek", { force = true })
 	ya.render()
 	if st.icon or st.mode then
 		Folder.icon, Status.mode, st.icon, st.mode = st.icon, st.mode, nil, nil
@@ -218,13 +226,17 @@ local function toggle_ui(st)
 
 	st.icon, st.mode = Folder.icon, Status.mode
 	Folder.icon = function(self, file)
-
 		if st.type == "global" then
 			local pos = rel_position(file,"current")
 			if not pos then
 				local pos = rel_position(file,"parent")
 				if not pos then
-					return st.icon(self, file)
+					local pos = rel_position(file,"preview")
+					if not pos then
+						return st.icon(self, file)
+					else
+						return ui.Span(PREVIEW_DOUBLE_KEYS[pos] .. " " .. file:icon().text .. " ")
+					end
 				else
 					return ui.Span(PARRENT_DOUBLE_KEYS[pos] .. " " .. file:icon().text .. " ")
 				end
@@ -270,35 +282,65 @@ return {
 			end
 
 			state.type = action
+			
 			toggle_ui(state())
-			return next(false, { "_read", state.current_num, nil })
+			return next(false, { "_read", state.current_num, nil, nil })
 		end
 
 		if action == "global" then
-			ya.err("jsdlfjljsf")
 			state.current_num = #Folder:by_kind(Folder.CURRENT).window
 			if state.current_num <= Current.area.h then -- Maybe the folder has not been full loaded yet
 				state.current_num = count_files(cx.active.current.cwd, Current.area.h)
 			end
 
-			state.parent_num = #Folder:by_kind(Folder.PARENT).window
-			if state.parent_num <= Parent.area.h then -- Maybe the folder has not been full loaded yet
-				state.parent_num = count_files(cx.active.parent.cwd, Parent.area.h)
+			if Folder:by_kind(Folder.PARENT) ~= nil then
+				state.parent_num = #Folder:by_kind(Folder.PARENT).window
+				if state.parent_num <= Parent.area.h then -- Maybe the folder has not been full loaded yet
+					state.parent_num = count_files(cx.active.parent.cwd, Parent.area.h)
+				end
+			else
+				state.parent_num = 0
+			end
+
+			if Folder:by_kind(Folder.PREVIEW) ~= nil then
+				state.preview_num = #Folder:by_kind(Folder.PREVIEW).window
+				if state.preview_num <= Parent.area.h then -- Maybe the folder has not been full loaded yet
+					local folder = Folder:by_kind(Folder.CURRENT)
+					local under_cursor_file = Folder:by_kind(Folder.CURRENT).window[folder.cursor - folder.offset + 1]
+					if under_cursor_file.cha.is_dir then
+						local split_char = ya.target_family() == "windows" and "\\" or "/"
+						state.preview_num = count_files(cx.active.current.cwd .. split_char .. under_cursor_file.name, Preview.area.h)
+					else
+						state.preview_num = 0
+					end
+				end
+			else
+				local folder = Folder:by_kind(Folder.CURRENT)
+				local under_cursor_file = Folder:by_kind(Folder.CURRENT).window[folder.cursor - folder.offset + 1]
+				ya.err(under_cursor_file.name)
+				if under_cursor_file.cha.is_dir then
+					local split_char = ya.target_family() == "windows" and "\\" or "/"
+					state.preview_num = count_files(cx.active.current.cwd .. split_char .. under_cursor_file.name, Preview.area.h)
+				else
+					state.preview_num = 0
+				end
 			end
 
 			state.type = action
 			toggle_ui(state())
-			return next(false, { "_read", state.current_num, state.parent_num })			
+			ya.err("send to _read parent:current:preview-"..tostring(state.parent_num).." "..tostring(state.current_num).." "..tostring(state.preview_num))
+			return next(false, { "_read", state.current_num, state.parent_num, state.preview_num })			
 		end
 
 		-- Step 2: Waiting to read the candidate from the user
 		if action == "_read" then
 			local current_num = tonumber(args[2])
 			local parent_num = tonumber(args[3])
-			local current_cands,parent_cands,cands = {},{},{}
+			local preview_num = tonumber(args[4])
+			local current_cands,parent_cands,preview_cands,cands = {},{},{},{}
 			if current_num ==0 then
 				current_cands = {}
-			elseif args[3] ~= nil then
+			elseif args[3] ~= nil or args[4] ~= nil then
 				current_cands = { table.unpack(CURRENT_DOUBLE_CANDS, 1, current_num) }
 			elseif current_num > #SINGLE_KEYS then
 				current_cands = { table.unpack(CURRENT_DOUBLE_CANDS, 1, current_num) }
@@ -313,9 +355,15 @@ return {
 				parent_num = 0
 			end
 
-			-- ya.err("c"..table2string(current_cands))
-			-- ya.err("p"..table2string(parent_cands))
-			-- ya.err("p"..tostring(parent_cands))
+			
+			ya.err("generate preview candy:"..tostring(preview_num))
+			if preview_num ~= nil and preview_num ~= 0 then
+				preview_cands = { table.unpack(PREVIEW_DOUBLE_CANDS, 1, preview_num) }
+			else
+				preview_cands = {}
+				preview_num = 0
+			end
+
 
 			for i = 1, #current_cands do --attach special key
 				table.insert(cands, current_cands[i])
@@ -323,6 +371,10 @@ return {
 
 			for i = 1, #parent_cands do --attach special key
 				table.insert(cands, parent_cands[i])
+			end
+
+			for i = 1, #preview_cands do --attach special key
+				table.insert(cands, preview_cands[i])
 			end
 
 			for i = 1, #SPECIAL_KEYS do --attach special key
@@ -335,7 +387,7 @@ return {
 			if cand == nil then --never auto exit when pressing a nonexistent prompt key
 				return next(false, { "_read", current_num, parent_num })
 			else
-				return next(true, { "_apply", cand, current_num, parent_num })
+				return next(true, { "_apply", cand, current_num, parent_num, preview_num })
 			end
 		end
 
@@ -348,10 +400,11 @@ return {
 		local cand = tonumber(args[2])
 		local current_entry_num = tonumber(args[3])
 		local parent_entry_num = tonumber(args[4])
+		local preview_entry_num = tonumber(args[5])
 		local folder = Folder:by_kind(Folder.CURRENT)
 
 		-- hit esc key
-		if cand > (current_entry_num + parent_entry_num) and SPECIAL_KEYS[cand - current_entry_num - parent_entry_num] == "<Esc>" then
+		if cand > (current_entry_num + parent_entry_num + preview_entry_num) and SPECIAL_KEYS[cand - current_entry_num - parent_entry_num - preview_entry_num] == "<Esc>" then
 			return
 		end
 
@@ -375,8 +428,17 @@ return {
 				return		
 			end
 
+			-- hit preview area
+			if cand > (current_entry_num + parent_entry_num) and cand <= (current_entry_num + parent_entry_num + preview_entry_num) then
+				local preview_folder = Folder:by_kind(Folder.PREVIEW)
+				ya.manager_emit("enter", {})
+				ya.manager_emit("arrow", { cand - current_entry_num - parent_entry_num - 1 + preview_folder.offset - preview_folder.cursor })
+				next(true, { "global" })
+				return		
+			end
+
 			-- hit space key
-			if SPECIAL_KEYS[cand - current_entry_num - parent_entry_num] == "<Space>" then
+			if SPECIAL_KEYS[cand - current_entry_num - parent_entry_num - preview_entry_num] == "<Space>" then
 				local under_cursor_file = Folder:by_kind(Folder.CURRENT).window[folder.cursor - folder.offset + 1]
 				local toggle_state = under_cursor_file:is_selected() and "false" or "true"
 				ya.manager_emit("select", { state = toggle_state })
