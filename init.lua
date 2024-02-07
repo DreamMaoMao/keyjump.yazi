@@ -281,11 +281,10 @@ return {
 	entry = function(_, args)
 		local action = args[1]
 
-		ya.err(action)
 		-- Step 1: Patch the UI with our candidates
 
 		-- enter normal, keep or select mode
-		if action == "normal" or action == "keep" or action == "select" then
+		if not action or action == "keep" or action == "select" then
 			if #SINGLE_KEYS >= Current.area.h then
 				state.current_num = Current.area.h -- Fast path
 			else

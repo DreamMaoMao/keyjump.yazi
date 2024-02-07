@@ -25,6 +25,13 @@ Select mode, you can use "Space" key to select/unselect item, and press "Esc" to
 
 https://github.com/DreamMaoMao/keyjump.yazi/assets/30348075/84faf1b5-7466-49d5-9598-fe9ef9098acc
 
+## Global mode
+
+Global mode, you can jump to everywhere.not only current window.
+you also can use "Space" key to select/unselect item, and press "Esc" to exit.
+
+https://github.com/DreamMaoMao/keyjump.yazi/assets/30348075/84faf1b5-7466-49d5-9598-fe9ef9098acc
+
 
 ## Install
 
@@ -68,6 +75,12 @@ exec = "plugin keyjump --sync --args=select"
 desc = "Keyjump (Select mode)"
 ```
 
+```toml
+[[manager.prepend_keymap]]
+on   = [ "i" ]
+exec = "plugin keyjump --sync --args=global"
+desc = "Keyjump (Global mode)"
+```
 
 When you see some character(singal character or double character) in left of the entry.
 Press the key of the character will jump to the corresponding entry
