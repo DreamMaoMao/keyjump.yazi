@@ -266,12 +266,25 @@ end
 
 local function next(sync, args) ya.manager_emit("plugin", { "keyjump", sync = sync, args = table.concat(args, " ") }) end
 
+local function count_preview_files(st)
+	local folder = Folder:by_kind(Folder.CURRENT)
+	local under_cursor_file = Folder:by_kind(Folder.CURRENT).window[folder.cursor - folder.offset + 1]
+	if under_cursor_file.cha.is_dir then
+		local split_char = ya.target_family() == "windows" and "\\" or "/"
+		st.preview_num = count_files(cx.active.current.cwd .. split_char .. under_cursor_file.name, Preview.area.h)
+	else
+		st.preview_num = 0
+	end
+end
+
 return {
 	entry = function(_, args)
 		local action = args[1]
 
 		-- Step 1: Patch the UI with our candidates
-		if not action or action == "keep" or action == "select" then
+
+		-- enter normal, keep or select mode
+		if action == "normal" or action == "keep" or action == "select" then
 			if #SINGLE_KEYS >= Current.area.h then
 				state.current_num = Current.area.h -- Fast path
 			else
@@ -282,17 +295,19 @@ return {
 			end
 
 			state.type = action
-			
 			toggle_ui(state())
 			return next(false, { "_read", state.current_num, nil, nil })
 		end
 
+		-- enter global mode
 		if action == "global" then
+			-- caculate file numbers of current window 
 			state.current_num = #Folder:by_kind(Folder.CURRENT).window
 			if state.current_num <= Current.area.h then -- Maybe the folder has not been full loaded yet
 				state.current_num = count_files(cx.active.current.cwd, Current.area.h)
 			end
 
+			-- caculate file numbers of parent window 
 			if Folder:by_kind(Folder.PARENT) ~= nil then
 				state.parent_num = #Folder:by_kind(Folder.PARENT).window
 				if state.parent_num <= Parent.area.h then -- Maybe the folder has not been full loaded yet
@@ -302,33 +317,18 @@ return {
 				state.parent_num = 0
 			end
 
+			-- caculate file numbers of preview window 
 			if Folder:by_kind(Folder.PREVIEW) ~= nil then
 				state.preview_num = #Folder:by_kind(Folder.PREVIEW).window
 				if state.preview_num <= Parent.area.h then -- Maybe the folder has not been full loaded yet
-					local folder = Folder:by_kind(Folder.CURRENT)
-					local under_cursor_file = Folder:by_kind(Folder.CURRENT).window[folder.cursor - folder.offset + 1]
-					if under_cursor_file.cha.is_dir then
-						local split_char = ya.target_family() == "windows" and "\\" or "/"
-						state.preview_num = count_files(cx.active.current.cwd .. split_char .. under_cursor_file.name, Preview.area.h)
-					else
-						state.preview_num = 0
-					end
+					count_preview_files(state)
 				end
 			else
-				local folder = Folder:by_kind(Folder.CURRENT)
-				local under_cursor_file = Folder:by_kind(Folder.CURRENT).window[folder.cursor - folder.offset + 1]
-				ya.err(under_cursor_file.name)
-				if under_cursor_file.cha.is_dir then
-					local split_char = ya.target_family() == "windows" and "\\" or "/"
-					state.preview_num = count_files(cx.active.current.cwd .. split_char .. under_cursor_file.name, Preview.area.h)
-				else
-					state.preview_num = 0
-				end
+				count_preview_files(state)
 			end
 
 			state.type = action
 			toggle_ui(state())
-			ya.err("send to _read parent:current:preview-"..tostring(state.parent_num).." "..tostring(state.current_num).." "..tostring(state.preview_num))
 			return next(false, { "_read", state.current_num, state.parent_num, state.preview_num })			
 		end
 
@@ -338,9 +338,11 @@ return {
 			local parent_num = tonumber(args[3])
 			local preview_num = tonumber(args[4])
 			local current_cands,parent_cands,preview_cands,cands = {},{},{},{}
+
+			-- generate cands of entry of current window
 			if current_num ==0 then
 				current_cands = {}
-			elseif args[3] ~= nil or args[4] ~= nil then
+			elseif args[3] ~= nil or args[4] ~= nil then -- global mode disable signal key
 				current_cands = { table.unpack(CURRENT_DOUBLE_CANDS, 1, current_num) }
 			elseif current_num > #SINGLE_KEYS then
 				current_cands = { table.unpack(CURRENT_DOUBLE_CANDS, 1, current_num) }
@@ -348,6 +350,7 @@ return {
 				current_cands = { table.unpack(SIGNAL_CANDS, 1, current_num) }
 			end
 
+			-- generate cands of entry of parent window
 			if parent_num ~= nil and parent_num ~= 0 then
 				parent_cands = { table.unpack(PARENT_DOUBLE_CANDS, 1, parent_num) }
 			else
@@ -355,8 +358,7 @@ return {
 				parent_num = 0
 			end
 
-			
-			ya.err("generate preview candy:"..tostring(preview_num))
+			-- generate cands of entry of preview window
 			if preview_num ~= nil and preview_num ~= 0 then
 				preview_cands = { table.unpack(PREVIEW_DOUBLE_CANDS, 1, preview_num) }
 			else
@@ -364,25 +366,27 @@ return {
 				preview_num = 0
 			end
 
-
-			for i = 1, #current_cands do --attach special key
+			--attach current cands to cands table
+			for i = 1, #current_cands do 
 				table.insert(cands, current_cands[i])
 			end
 
-			for i = 1, #parent_cands do --attach special key
+			--attach parent cands to cands table
+			for i = 1, #parent_cands do 
 				table.insert(cands, parent_cands[i])
 			end
 
-			for i = 1, #preview_cands do --attach special key
+			--attach preview cands to cands table
+			for i = 1, #preview_cands do 
 				table.insert(cands, preview_cands[i])
 			end
 
+			--attach special cands to cands table
 			for i = 1, #SPECIAL_KEYS do --attach special key
 				table.insert(cands, SPECIAL_CANDS[i])
 			end
 
-
-			local cand = ya.which { cands = cands, silent = false }
+			local cand = ya.which { cands = cands, silent = true }
 
 			if cand == nil then --never auto exit when pressing a nonexistent prompt key
 				return next(false, { "_read", current_num, parent_num })
@@ -408,6 +412,7 @@ return {
 			return
 		end
 
+		-- apply global mode
 		if state.type == "global" then
 
 			-- hit current area
@@ -450,7 +455,7 @@ return {
 			return
 		end
 
-		-- Step 4: select mode, allow use special key in keyjump
+		-- apply select mode
 		if state.type == "select" then
 			if cand <= current_entry_num then -- hit normal key
 				local folder = Folder:by_kind(Folder.CURRENT)
@@ -473,14 +478,16 @@ return {
 			return
 		end
 
-		-- arrow in keep mode and normal mode
+		-- apply keep mode and normal mode
 		ya.manager_emit("arrow", { cand - 1 + folder.offset - folder.cursor })
 
-		-- Step 5: keep mode, will auto enter when select folder and will auto exit when select file
+		-- keep mode will auto enter when select folder and continue keep mode
 		if state.type == "keep" and folder.window[cand].cha.is_dir then
 			local folder = Folder:by_kind(Folder.CURRENT)
 			ya.manager_emit("enter", {})
 			next(true, { "keep" })
 		end
+
+		-- normal mode exit
 	end,
 }
