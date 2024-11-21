@@ -535,6 +535,7 @@ local apply = ya.sync(function(state, arg_cand, arg_current_num, arg_parent_num,
 			return true
 		elseif special_key_str == "<Enter>" then
 			ya.manager_emit("open", {})
+			return true
 		elseif special_key_str == "<Left>" then
 			ya.manager_emit("leave", {})
 			return false
