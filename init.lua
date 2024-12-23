@@ -7,6 +7,7 @@ local SPECIAL_KEYS = {
 	"<A-j>", "<A-k>",
 	"z",
 	"<C-j>", "<C-k>",
+	"<C-f>", "<C-b>",
 	"y", "p",
 }
 
@@ -143,6 +144,7 @@ local INPUT_CANDS = {
 	{ on = "<A-j>" }, { on = "<A-k>" },
 	{ on = "<C-j>" }, { on = "<C-k>" },
 	{ on = "J" }, { on = "K" },
+	{ on = "<C-f>" }, { on = "<C-b>" },
 
 }
 
@@ -154,6 +156,7 @@ local INPUT_KEY = {
 	"<A-j>", "<A-k>" ,
 	"<C-j>", "<C-k>" ,
 	"J", "K",
+	"<C-f>", "<C-b>" ,
 }
 
 
@@ -333,6 +336,12 @@ local function count_preview_files(st)
 	end
 end
 
+local function jk_around(direction)
+	local current = cx.active.current
+	local new = (current.cursor + direction) % #current.files
+	ya.manager_emit("arrow", { new - current.cursor })
+end
+
 local apply = ya.sync(function(state, arg_cand, arg_current_num, arg_parent_num, arg_preview_num)
 
 	local cand = tonumber(arg_cand)
@@ -350,7 +359,12 @@ local apply = ya.sync(function(state, arg_cand, arg_current_num, arg_parent_num,
 		elseif special_key_str == "z" then
 			return true
 		elseif special_key_str == "<Enter>" then
-			ya.manager_emit("open", {})
+			local under_cursor_file = cx.active.current.window[folder.cursor - folder.offset + 1]
+			if under_cursor_file.cha.is_dir then
+				ya.manager_emit("enter", {})
+			else
+				ya.manager_emit("open", {})
+			end
 			return true
 		elseif special_key_str == "<Left>" then
 			ya.manager_emit("leave", {})
@@ -359,10 +373,12 @@ local apply = ya.sync(function(state, arg_cand, arg_current_num, arg_parent_num,
 			ya.manager_emit("enter", {})
 			return false
 		elseif special_key_str == "<Up>" then
-			ya.manager_emit("arrow", { "-1" })
+			--ya.manager_emit("arrow", { "-1" })
+			jk_around(-1)
 			return false
 		elseif special_key_str == "<Down>" then
-			ya.manager_emit("arrow", { "1" })
+			--ya.manager_emit("arrow", { "1" })
+			jk_around(1)
 			return false
 		elseif special_key_str == "<Space>" then
 			local under_cursor_file = cx.active.current.window[folder.cursor - folder.offset + 1]
@@ -370,22 +386,24 @@ local apply = ya.sync(function(state, arg_cand, arg_current_num, arg_parent_num,
 			ya.manager_emit("toggle", { state = toggle_state })
 			ya.manager_emit("arrow", { 1 })
 			return false
-		elseif special_key_str == "h"then
+		elseif special_key_str == "h" then
 			if state.type == "global" then
 				ya.manager_emit("leave", {})
 			end
 			return false
-		elseif special_key_str == "j"then
+		elseif special_key_str == "j" then
 			if state.type == "global" then
-				ya.manager_emit("arrow", { "1" })
+				--ya.manager_emit("arrow", { "1" })
+				jk_around(1)
 			end
 			return false
-		elseif special_key_str == "k"then
+		elseif special_key_str == "k" then
 			if state.type == "global" then
-				ya.manager_emit("arrow", { "-1" })
+				--ya.manager_emit("arrow", { "-1" })
+				jk_around(-1)
 			end
 			return false
-		elseif special_key_str == "l"then
+		elseif special_key_str == "l" then
 			if state.type == "global" then			
 				ya.manager_emit("enter", {})
 			end
@@ -402,10 +420,10 @@ local apply = ya.sync(function(state, arg_cand, arg_current_num, arg_parent_num,
 		elseif special_key_str == "<A-k>" then
 			ya.manager_emit("seek", { "-5" })
 			return false
-		elseif special_key_str == "<C-j>" then
+		elseif special_key_str == "<C-j>" or special_key_str == "<C-f>" then
 			ya.manager_emit("arrow", { "100%" })
 			return false
-		elseif special_key_str == "<C-k>" then
+		elseif special_key_str == "<C-k>" or special_key_str == "<C-b>" then
 			ya.manager_emit("arrow", { "-100%" })
 			return false
 		elseif special_key_str == "y"then
@@ -427,7 +445,13 @@ local apply = ya.sync(function(state, arg_cand, arg_current_num, arg_parent_num,
 		-- hit current area
 		if cand <= current_entry_num then -- hit normal key
 			local current_folder = cx.active.current
-			ya.manager_emit("arrow", { cand - 1 + current_folder.offset - current_folder.cursor })
+			-- ya.manager_emit("arrow", { cand - 1 + current_folder.offset - current_folder.cursor })
+			local under_cursor_file = cx.active.current.window[cand]
+			if under_cursor_file.cha.is_dir then
+				ya.manager_emit("cd", {under_cursor_file.url})
+			else
+				ya.manager_emit("arrow", { cand - 1 + current_folder.offset - current_folder.cursor })
+			end
 		-- hit parent area
 		elseif cand > current_entry_num and cand <= (current_entry_num + parent_entry_num) then
 			local parent_folder = cx.active.parent
