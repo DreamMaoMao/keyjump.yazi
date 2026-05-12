@@ -1,3 +1,7 @@
+> I no longer maintain a separate plugin repository,refer my config
+https://github.com/DreamMaoMao/yazi-config
+
+
 # keyjump.yazi
 
 A Yazi plugin that allows jumping to a line by typing a hint character, much like hop.nvim
